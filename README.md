@@ -65,6 +65,12 @@ The project is based on a real home-network use case using sing-box and Hysteria
 5. **Use OpenWrt conventions:** prefer UCI, procd, rpcd/ubus, LuCI, and native firewall integration.
 6. **Separate upstream and local rules:** upstream rules can be updated without overwriting user exceptions.
 
+## Existing projects and project differentiation
+
+Several existing projects already provide overlapping LuCI and sing-box functionality, including [HomeProxy](https://github.com/immortalwrt/homeproxy), [PassWall2](https://github.com/Openwrt-Passwall/openwrt-passwall2), [OpenWrt-momo](https://github.com/nikkinikki-org/OpenWrt-momo), [openwrt-singbox](https://github.com/aminmokhtari94/openwrt-singbox), and [singbox-openwrt-config](https://github.com/ssharkkky/singbox-openwrt-config).
+
+A preliminary review found substantial overlap with this repository's proposed scope. The project has not yet established a unique feature gap. Before implementation, compare these projects on an isolated OpenWrt test system and prefer adopting or contributing to an existing project if it meets the requirements. The detailed review is in [docs/PRIOR_ART_REVIEW.md](docs/PRIOR_ART_REVIEW.md).
+
 ## Planned milestones
 
 1. Define the supported OpenWrt, sing-box, and firewall versions.
