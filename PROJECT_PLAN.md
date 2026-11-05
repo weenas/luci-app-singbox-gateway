@@ -1,175 +1,150 @@
-# OpenWrt sing-box Gateway LuCI 应用项目计划
+# OpenWrt sing-box Gateway LuCI Application — Project Plan
 
-## 1. 项目目标
+## 1. Goal
 
-把当前主路由上已经验证过的 sing-box + Hysteria2 分流方案，整理成可安装、可配置、可诊断、可回退的 OpenWrt LuCI 应用。项目面向具备 OpenWrt 基础知识的家庭用户，降低手工编辑 UCI、JSON、脚本和 cron 的门槛。
+Assess whether a safe, recoverable LuCI application for sing-box policy routing on OpenWrt is needed, then build it only if comparison with existing projects demonstrates a concrete gap. The original use case is a home-network setup using sing-box with Hysteria2.
 
-项目不依赖 Shadowrocket 运行。Shadowrocket 上游规则只作为一种规则数据来源；sing-box 是本项目的代理核心。
+The application must not depend on Shadowrocket at runtime. sing-box is the proxy core; Shadowrocket may be one source of rule data.
 
-## 2. 设计原则
+## 2. Current project decision
 
-- **不破坏原有网络**：安装后默认不接管 LAN 流量，须由用户明确启用；启动、配置更新或 VPN 故障时尽可能保留直连。
-- **分步应用和回滚**：先生成候选配置、校验通过再替换；保留上一份可用配置，失败时自动恢复。
-- **密钥不进入规则和日志**：密码、混淆密钥等保存在受限配置中，页面默认遮蔽，日志不得输出。
-- **避免重复造规则**：从上游获取并适配规则；用户例外规则与上游数据分开维护。
-- **可诊断**：页面清楚显示服务状态、最近更新时间、配置校验、规则来源和失败原因。
-- **兼容 OpenWrt 原生管理方式**：优先使用 UCI、procd、rpcd/ubus、LuCI 和系统防火墙机制，不在后台另造不可见状态。
+A prior-art review found substantial overlap with HomeProxy, PassWall2, OpenWrt-momo, openwrt-singbox, and singbox-openwrt-config. The current repository contains documentation only and no application code.
 
-## 3. 首版范围（MVP）
+**Implementation is on hold pending an isolated, requirement-based comparison.** Use an existing project or contribute upstream if it meets the requirements. Continue this repository only if a specific unmet need is demonstrated and its intended audience is clear.
 
-### 包含
+See [docs/PRIOR_ART_REVIEW.md](docs/PRIOR_ART_REVIEW.md) for the preliminary comparison.
 
-1. **服务管理**
-   - 安装和检测 sing-box 依赖及版本。
-   - 启停、开机启动、运行状态和最近日志。
-   - 生成 sing-box 配置并在应用前执行配置校验。
+## 3. Requirements to compare
 
-2. **Hysteria2 出站**
-   - 服务器地址、端口、认证密码、TLS/SNI、Salamander 混淆参数。
-   - Brutal 拥塞控制带宽参数；若配置上下行速率，UI 明确单位并提示按真实 VPS 带宽设置。
-   - 敏感字段遮蔽；导出诊断信息时自动剔除凭据。
+Evaluate candidate projects on an isolated OpenWrt VM or test device. Record actual behavior, not only feature claims.
 
-3. **分流策略**
-   - 至少支持代理、直连、拒绝三种动作。
-   - 支持上游规则集和本地自定义域名/IP 规则。
-   - 明确并可视化匹配顺序，默认让用户自定义例外优先于通用规则。
-   - 保留明确的最终策略，默认采用故障时直连的安全策略；用户可以选择代理优先，但必须清楚提示风险。
+- Hysteria2 manual and subscription setup.
+- Salamander obfuscation and the required upload/download bandwidth settings.
+- sing-box route ordering, proxy/direct/reject actions, and custom domain/IP rules.
+- Rule provider updates, validation, failure handling, and rollback.
+- DNS behavior for both IPv4 and IPv6, including recovery when the proxy is offline.
+- LAN-wide versus per-device activation and safe shutdown behavior.
+- OpenWrt releases, architectures, firewall versions, memory/storage use, license, release cadence, and maintainability.
+- Whether a project's maintainers are open to contributions for any missing capability.
 
-4. **上游规则更新**
-   - 首版适配 Shadowrocket `.conf` 文本中的常见规则类型，例如 `DOMAIN`、`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD`、`IP-CIDR`、`IP-CIDR6` 和动作标记。
-   - 仅转换项目明确支持的语法；遇到未知或有歧义的行时报告数量和行号，不静默丢弃。
-   - 将匹配条件转换为 sing-box rule-set source JSON，再用设备上兼容版本的 sing-box 编译为 `.srs`。
-   - 下载、解析、生成、编译和校验全部成功后再原子替换；网络或校验失败时保留当前可用规则。
-   - 更新周期、来源 URL、超时和并发由 UI 配置；支持手动更新和查看最近一次结果。
+## 4. Conditional product scope
 
-5. **DNS 基础设置**
-   - 显示当前 DNS 接管方式、缓存和上游配置。
-   - 不默认覆盖 LAN 的 IPv6 RA/DHCPv6 DNS 发布；DNS 改动单独启用并给出恢复说明。
-   - DNS 上游和代理出站的依赖关系在页面说明，避免形成循环解析。
+If the comparison demonstrates a unique gap, a possible MVP is a focused OpenWrt LuCI manager for the supported sing-box + Hysteria2 use case.
 
-6. **状态与诊断**
-   - sing-box 服务、隧道可达性、规则更新时间及校验状态。
-   - 测试域名解析与代理/直连出口的简明操作。
-   - 导出脱敏诊断包，包含版本、相关配置摘要、状态和日志片段。
+### Potential capabilities
 
-### 首版不包含
+1. **Service management**
+   - Detect sing-box installation/version and display service state.
+   - Start, stop, and enable the service at boot.
+   - Generate configuration and validate it before activation.
 
-- 提供或运营代理服务器、节点订阅服务、公共规则托管服务。
-- 在插件里直接 fork 或镜像维护 Shadowrocket 上游规则。
-- 自动更改主路由所有 LAN/IPv6 设置而不经单独确认。
-- 复杂的多节点自动测速、负载均衡、策略组订阅和图形化流量分析。
-- 与特定 NAS、云厂商或某一个 VPS 供应商绑定。
+2. **Hysteria2 outbound**
+   - Configure server, port, authentication, TLS/SNI, and Salamander.
+   - Expose bandwidth parameters with clear units and a warning to use realistic VPS capacity.
+   - Mask secrets and redact diagnostic exports.
 
-## 4. 目标架构
+3. **Policy routing**
+   - Support proxy, direct, and reject actions based on domains, IP addresses, and CIDR ranges.
+   - Display rule precedence and let users maintain local exceptions separately from upstream rules.
+   - Make final and failure policies explicit. Direct fallback preserves connectivity but may send traffic outside the tunnel; it is not a privacy-preserving fail-closed mode.
 
-```text
-LuCI 页面
-  └─ rpcd/ubus 方法（参数校验、权限检查、任务状态）
-      └─ UCI 配置
-          └─ procd 管理 sing-box
-              ├─ sing-box 配置生成器
-              ├─ 规则更新器：获取 → 解析 → 转换 → 编译 → 校验 → 原子发布
-              └─ 防火墙集成：显式启用、保留路由器管理与本机流量、支持停止/回退
-```
+4. **Rule adaptation and updates**
+   - Fetch upstream Shadowrocket rule files by URL without maintaining an upstream fork or copying the full file into this repository.
+   - Initially support a documented subset such as DOMAIN, DOMAIN-SUFFIX, DOMAIN-KEYWORD, IP-CIDR, IP-CIDR6, and supported action markers.
+   - Report unsupported or ambiguous lines with counts and locations; never silently discard them.
+   - Convert supported matches to sing-box rule-set source JSON and compile to SRS using a compatible sing-box version.
+   - Download, parse, convert, compile, and validate in a staging location; replace active files atomically only after every step succeeds.
+   - Keep the previous active rules on failure. Show source, timestamp, digest, converter/core versions, and update result.
 
-建议把实现拆成可独立审查的包：`luci-app-*` 前端、后端 rpcd/ubus 操作、默认 UCI schema、服务 init/procd 文件、配置/规则生成器、规则更新脚本、文档和自动化检查。避免把复杂 shell 拼接逻辑塞进 LuCI 页面。
+5. **DNS, diagnostics, and recovery**
+   - Show DNS interception and upstream relationships to help avoid loops.
+   - Do not silently overwrite LAN IPv6 RA/DHCPv6 DNS advertisements.
+   - Provide service/tunnel/rule status and redacted diagnostic export.
+   - Remove only firewall state owned by the application on stop/uninstall; preserve user data by default.
 
-## 5. 规则数据和自定义规则方案
+These capabilities are a proposal, not implemented behavior.
 
-- 上游 Shadowrocket 文件按来源 URL 获取，不把上游整份规则复制进插件仓库。
-- 转换器和受支持语法测试放在本项目主仓库。
-- 用户的自定义规则存于独立 UCI section 或独立文件，不写入下载的上游文件；更新时合并生成，不覆盖用户内容。
-- 自定义规则至少支持域名精确匹配、域名后缀、IP/CIDR 和动作；暂不支持的语法必须拒绝或明确提示。
-- 生成后记录来源、抓取时间、内容摘要、转换器版本和 sing-box 版本，方便诊断和复现。
-- 保留上一版规则集与生成配置；更新失败不影响正在使用的版本。
-- 归属和署名：界面、文档及随包发布的转换结果需按上游许可证要求注明来源；首版优先运行时下载和本地转换，避免发布未经整理的上游派生文件。
+## 5. Safety requirements if development proceeds
 
-## 6. 故障策略
+- Installation must not enable LAN takeover.
+- Applying network-wide settings must be explicit and have a clear recovery path.
+- Candidate configuration must pass sing-box validation before replacing the active version.
+- Rule update failure must leave the last known-good rules active.
+- Service exit must not leave blackhole routes or stale forwarding rules.
+- A failed restart after an update must restore the previous configuration and rules.
+- Protect router management and local-network traffic from proxy routing loops.
+- Do not place credentials, private domains, or home addresses in Git history, logs, screenshots, or diagnostics.
+- Verify all recovery claims through isolated failure tests before documenting them as implemented.
 
-| 故障 | 首版预期行为 |
-|---|---|
-| VPS/Hysteria2 不可达 | 代理流量按所选故障策略处理；默认优先保证普通直连可用，并显示代理不可达状态 |
-| sing-box 进程退出 | 清理插件创建的临时转发状态，恢复启用前的直连路径；不得留下黑洞路由 |
-| 配置生成或校验失败 | 不替换当前运行配置；保留错误详情和上一个有效版本 |
-| 上游下载/转换失败 | 继续使用当前规则；显示失败，不清空规则集 |
-| 规则更新后 sing-box 启动失败 | 自动回滚到上一个已验证配置和规则集 |
-| 插件卸载 | 停止服务并移除插件创建的防火墙对象；默认保留用户配置和备份，除非用户显式选择清理 |
+## 6. Possible architecture, only if justified
 
-这些行为必须通过测试验证后才能在文档中称为已实现。
+Use standard OpenWrt mechanisms: UCI for persistent settings; LuCI for the interface; rpcd/ubus for bounded privileged operations; procd for service lifecycle; sing-box for proxy routing; and native firewall integration. Keep rule parsing, configuration generation, update, validation, and rollback outside the UI code so each component can be reviewed and tested independently.
 
-## 7. 分阶段交付
+Avoid adding a custom daemon or new data format unless the prior-art comparison demonstrates a need that cannot be met by existing OpenWrt and sing-box mechanisms.
 
-### 阶段 0：仓库和决策基线（仓库转移已完成）
+## 7. Conditional milestones
 
-- 仓库已转移到 `weenas/luci-app-singbox-gateway`；接下来设置开源许可证、贡献指南和支持范围。
-- 确认首版支持的 OpenWrt 版本、架构、sing-box 安装来源和防火墙版本。
-- 记录当前主路由的配置作为需求案例，不把设备凭据或个人规则提交到公开仓库。
+### Phase 0: Prior-art decision
 
-**验收**：仓库所有权已明确；开源许可证明确；CI 能运行基础格式与静态检查。
+- Complete the isolated candidate comparison.
+- Select an existing project, prepare an upstream contribution, or document the unique unmet need for this repository.
+- Confirm target OpenWrt releases, architectures, sing-box source/version, firewall, and license constraints.
 
-### 阶段 1：包骨架与只读状态
+**Acceptance:** a written decision identifies the chosen path and evidence for it. No product code is written before this gate.
 
-- 建立 LuCI 菜单、权限、服务状态页和版本检测。
-- 加入 UCI 默认 schema、procd 生命周期骨架和卸载说明。
-- 此阶段不接管 LAN 流量。
+### Phase 1: Non-invasive package skeleton
 
-**验收**：可安装/卸载；状态页准确显示依赖和运行状态；无网络流量配置副作用。
+- Add LuCI navigation, access controls, and a read-only status view.
+- Add package metadata, UCI defaults, and service lifecycle scaffolding.
+- Do not change traffic routing.
 
-### 阶段 2：配置生成与单机验证
+**Acceptance:** install/remove and status reporting work without affecting network traffic.
 
-- 实现 Hysteria2 配置表单、密钥处理、生成器和配置校验。
-- 支持手动启停 sing-box 与诊断日志。
-- 在虚拟机或隔离测试设备上验证节点连接、代理/直连分流及重启行为。
+### Phase 2: Hysteria2 configuration and validation
 
-**验收**：校验失败不应用；密码不会出现在页面明文回显和日志中；停止服务后测试设备恢复原出口。
+- Add the required Hysteria2 fields and secret handling.
+- Generate a candidate configuration and validate before apply.
+- Verify node connectivity and service restart in an isolated environment.
 
-### 阶段 3：规则适配与用户例外
+**Acceptance:** invalid configuration is rejected; secrets are absent from logs; stopping the service leaves the test device with a usable direct path.
 
-- 为上游常见 Shadowrocket 语法编写解析器和测试样例。
-- 生成并编译 sing-box 规则集；加入本地自定义域名/IP 和动作优先级。
-- 用固定样本测试解析行数、转换结果及未知规则报告。
+### Phase 3: Rule adapters and local exceptions
 
-**验收**：给定相同输入和版本可重复生成相同结果；未知语法不会被静默丢弃；自定义规则优先顺序符合 UI 展示。
+- Implement only the supported Shadowrocket syntax, with fixtures and parser tests.
+- Convert and compile sing-box rule sets.
+- Keep custom user rules independent and apply the documented precedence.
 
-### 阶段 4：更新器和故障回滚
+**Acceptance:** unsupported syntax is reported, update output is reproducible, and custom rules have the expected effect.
 
-- 手动/定时更新、下载超时、临时目录、校验、备份、原子替换和失败回滚。
-- LuCI 显示更新历史、来源、时间、摘要及错误信息。
+### Phase 4: Update lifecycle and rollback
 
-**验收**：模拟断网、损坏输入、编译失败、磁盘不足和服务重启失败，确认旧规则仍可用且普通直连恢复。
+- Add manual and scheduled updates, staging, validation, atomic replacement, and rollback.
+- Show history and errors in LuCI.
 
-### 阶段 5：防火墙接管和小范围试点
+**Acceptance:** simulated network, parse, compile, storage, and restart failures preserve a working version.
 
-- 先支持显式启用 LAN 转发接管，并保留路由器管理、局域网、回环和必要控制流量。
-- 设置启动前检查、应用倒计时/自动回退和明确的停止按钮。
-- 先在一台测试客户端验证，再扩大到选定设备或全 LAN。
+### Phase 5: Limited traffic takeover
 
-**验收**：关闭节点或停止服务后，测试客户端仍可访问直连网站和管理主路由；不会出现 DHCP 冲突、DNS 环路或无法恢复的默认路由变化。
+- Add explicit LAN/per-device activation only if required by the proven gap.
+- Provide preflight checks, a timeout-based rollback, and a clear disable action.
+- Test one client before any broader rollout.
 
-### 阶段 6：打包、文档和发布
+**Acceptance:** the client retains direct access and router management after node or service failure; no DHCP conflict, DNS loop, or unrecoverable route remains.
 
-- 提供 README、安装/升级/卸载/恢复、规则来源和隐私说明。
-- 构建 OpenWrt 软件包并在目标版本/架构矩阵验证。
-- 发布首个预览版，收集问题后再决定是否进入稳定版。
+### Phase 6: Package and release
 
-**验收**：干净设备可按文档安装、配置、验证和卸载；公开构建不包含真实节点参数、令牌、私有域名清单或家庭地址。
+- Document installation, upgrade, uninstall, recovery, supported targets, privacy, and upstream attribution.
+- Build and validate packages across the supported matrix.
+- Publish a preview only after clean-device setup and failure recovery are verified.
 
-## 8. 首批技术决策（建议）
+## 8. Open items
 
-1. 插件名先沿用仓库名 `luci-app-singbox-gateway`；命令、UCI namespace、服务名在实现前统一定案，避免后续兼容包袱。
-2. 上游规则转换为本地 sing-box rule-set；不维护上游 fork。
-3. 自定义规则是插件核心功能，且独立于上游文件保存。
-4. 默认安装不启用 LAN 自动接管；故障默认 fail-open 到直连，给用户可见的模式选择和风险说明。
-5. 首版先支持用户现有的 Hysteria2 + sing-box 场景；其他协议和多节点能力待稳定后评估。
+- Decide whether this repository should continue after the prior-art comparison.
+- Confirm a project license and contribution/security-reporting process before accepting code.
+- Verify sing-box rule-set format compatibility for the selected core versions.
+- Confirm attribution and license obligations for locally converted or distributed upstream rules.
+- Verify the actual router's IPv4/IPv6, DNS, rule order, and firewall requirements if the project continues.
 
-## 9. 待实现前核实
+## 9. Status
 
-- GitHub 仓库已转移至 `weenas/luci-app-singbox-gateway`。开源许可证、贡献指南和支持范围仍需补齐。
-- 需在现有主路由和旁路由的实际配置上核对最终分流顺序、IPv4/IPv6 路径、DNS 上游和防火墙机制；计划中描述的是设计要求，不代表插件已经实现或验证。
-- 需确认 `sing-box` 与 OpenWrt 各目标版本的可用包、构建工具链及 rule-set 源格式版本兼容性。
-- 需确认上游规则的许可证如何适用于转换后结果的分发，并在仓库中提供署名和来源链接。
-- 首版 UI 的故障模式要在“代理失败即直连”和“代理失败阻断代理类流量”之间提供清楚选择；默认值采用直连优先，但不能伪装成严格隐私模式。
-
-## 10. 项目状态
-
-本文是项目计划草案。当前尚未开始应用代码实现，也未启用主路由上的全 LAN 接管。计划中的验收项需逐项实施和实测后才能标记完成。
+This is a planning document. No application code has been implemented, no installable package is available, and LAN-wide takeover is not enabled by this project. All proposed behavior requires implementation and isolated validation before being described as complete.
